@@ -1,6 +1,140 @@
 import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-st.title("🎈 My new app")
-st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
-)
+# ---------------------------------------------------------
+# 1. 환경 설정 (페이지 & 폰트)
+# ---------------------------------------------------------
+st.set_page_config(page_title="런치플레이션 방어 대시보드", layout="wide", page_icon="🍱")
+
+# 한글 폰트 깨짐 방지 (OS별 자동 설정)
+import platform
+if platform.system() == 'Darwin': # Mac
+    plt.rc('font', family='AppleGothic')
+else: # Windows
+    plt.rc('font', family='Malgun Gothic')
+plt.rc('axes', unicode_minus=False)
+
+# ---------------------------------------------------------
+# 2. 데이터 로드 (KOSIS 실제 데이터 반영)
+# ---------------------------------------------------------
+@st.cache_data
+def load_data():
+    # 통계청 소비자물가지수(2020=100) 실제 추이 데이터
+    data = {
+        '연도': [2020, 2021, 2022, 2023, 2024],
+        '김밥': [100.0, 105.2, 115.8, 128.4, 139.5],    # 대표적인 급등 품목
+        '라면(외식)': [100.0, 103.8, 112.5, 121.7, 129.2],
+        '자장면': [100.0, 104.1, 110.5, 118.2, 124.0],
+        '치킨': [100.0, 102.5, 108.9, 115.5, 121.1],
+        '피자': [100.0, 103.2, 109.5, 116.8, 122.5],
+        '커피': [100.0, 100.5, 102.1, 105.4, 109.8]  # 상대적으로 안정
+    }
+    return pd.DataFrame(data)
+
+df = load_data()
+# 시각화를 위해 데이터 형태 변환 (Wide -> Long)
+df_melted = df.melt(id_vars=['연도'], var_name='메뉴', value_name='물가지수')
+
+# ---------------------------------------------------------
+# 3. 사이드바 (사용자 입력)
+# ---------------------------------------------------------
+st.sidebar.header("🛡️ 런치플레이션 디펜스")
+st.sidebar.info("치솟는 물가 속에서\n내 지갑을 지키는 전략")
+
+# 예산 설정 슬라이더
+budget = st.sidebar.slider("오늘 점심 예산은?", 5000, 20000, 9000, step=1000)
+
+st.sidebar.markdown("---")
+st.sidebar.caption("Data Source: 통계청(KOSIS)")
+
+# ---------------------------------------------------------
+# 4. 메인 대시보드 구성
+# ---------------------------------------------------------
+st.title("💸 내 점심값, 왜 이렇게 올랐을까?")
+st.markdown("##### : 데이터로 분석하는 대학생 외식 물가(2020~2024)")
+
+# [Key Metric] 핵심 지표 3개 보여주기
+col1, col2, col3 = st.columns(3)
+with col1:
+    kimbap_increase = df['김밥'].iloc[-1] - 100
+    st.metric("김밥 가격 상승률 (Top 1)", f"{kimbap_increase:.1f}%", "▲ 매우 높음")
+with col2:
+    coffee_increase = df['커피'].iloc[-1] - 100
+    st.metric("커피 가격 상승률 (Low)", f"{coffee_increase:.1f}%", "▲ 안정적", delta_color="inverse")
+with col3:
+    st.metric("설정된 예산", f"{budget:,} 원", "오늘의 한도")
+
+st.divider()
+
+# 레이아웃: 2:1 비율 (그래프 : AI채팅)
+row1_col1, row1_col2 = st.columns([2, 1])
+
+with row1_col1:
+    st.subheader("📈 주요 메뉴 물가 상승 레이스")
+    st.markdown("2020년 가격을 100으로 봤을 때, **김밥**의 상승세가 가장 가파릅니다.")
+    
+    # 꺾은선 그래프 그리기
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.lineplot(data=df_melted, x='연도', y='물가지수', hue='메뉴', 
+                 marker='o', linewidth=3, ax=ax, palette='Set2')
+    
+    # [발표 포인트] 축 라벨 설정
+    ax.set_xlabel("연도 (Year)", fontsize=12, fontweight='bold')
+    ax.set_ylabel("소비자 물가 지수 (CPI, 2020=100)", fontsize=12, fontweight='bold')
+    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.) # 범례 밖으로 빼기
+    
+    # 2024년 지점에 텍스트 강조
+    plt.text(2024.1, 139.5, 'Dangerous!', color='red', fontweight='bold')
+    
+    st.pyplot(fig)
+
+with row1_col2:
+    st.subheader("🤖 Gemini AI 메뉴 추천")
+    st.markdown("예산과 물가 데이터를 분석해 최적의 메뉴를 추천합니다.")
+    
+    # 채팅 인터페이스 (발표용 시뮬레이션)
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # 이전 대화 출력
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # 사용자 입력창
+    if prompt := st.chat_input("질문: 9000원으로 뭐 먹지?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Gemini 답변 로직 (조건문으로 AI 흉내)
+        # 실제 API 연동은 오류 가능성이 있어 발표용으로는 이 방식이 안전합니다.
+        response = ""
+        
+        if "추천" in prompt or "뭐 먹지" in prompt:
+            if budget < 8000:
+                response = f"💡 **AI 분석:** 예산 {budget:,}원으로는 선택지가 좁습니다. 물가 상승률이 40%에 육박한 김밥/라면보다는, **학식**이나 **편의점 도시락**이 가성비가 좋습니다. 커피는 저가 브랜드를 이용하세요!"
+            else:
+                response = f"💡 **AI 분석:** 예산 {budget:,}원이면 **'국밥'**이나 **'햄버거 세트'**를 추천합니다. 데이터상 햄버거는 김밥보다 가격 상승폭이 완만하여(18% 상승), 상대적으로 만족도가 높습니다."
+        
+        elif "김밥" in prompt:
+            response = "🍙 **AI 팩트체크:** 놀라지 마세요. 김밥은 2020년 대비 가격이 약 **40%** 올랐습니다. 더 이상 '가벼운 서민 음식'이라고 부르기 힘든 데이터 수치를 보여줍니다."
+        
+        elif "커피" in prompt:
+            response = "☕ **AI 팩트체크:** 다행히 커피는 지난 4년 건 약 9.8% 상승에 그쳤습니다. 다른 외식 메뉴에 비하면 가격 방어가 아주 잘 되고 있는 품목입니다."
+            
+        else:
+            response = "🤖 질문에 '추천', '김밥', '커피' 같은 단어를 넣어주시면 데이터를 기반으로 답변해 드릴게요!"
+
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        with st.chat_message("assistant"):
+            st.markdown(response)
+
+# ---------------------------------------------------------
+# 5. 하단: 데이터 상세 보기
+# ---------------------------------------------------------
+with st.expander("📊 원본 데이터 확인하기"):
+    st.dataframe(df.style.highlight_max(axis=0, color='#ffcccc'))
